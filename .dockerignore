@@ -1,0 +1,7 @@
+**/target/
+.git/
+.idea/
+.mvn/
+docs/
+**/*.iml
+*.log

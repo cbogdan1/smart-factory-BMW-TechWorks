@@ -1,0 +1,2 @@
+ALTER TABLE production_plan
+    ADD COLUMN current_stage VARCHAR(50) NOT NULL DEFAULT 'CREATED';

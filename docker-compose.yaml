@@ -1,0 +1,185 @@
+name: smart-factory
+
+services:
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: sf-kafka
+    ports:
+      - "9092:9092"   # host clients
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,INTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"   # convenient for students; disable for prod-like
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:16
+    container_name: sf-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: factory
+      POSTGRES_PASSWORD: factory
+      POSTGRES_DB: postgres
+    volumes:
+      # Mounted into the image's init dir; Postgres runs it on first container init.
+      - ./init-db/create-databases.sql:/docker-entrypoint-initdb.d/create-databases.sql:ro
+      - sf-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # -d postgres avoids "FATAL: database \"factory\" does not exist"
+      # (pg_isready otherwise defaults the dbname to the username).
+      test: ["CMD-SHELL", "pg_isready -U factory -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: sf-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: smart-factory
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      DYNAMIC_CONFIG_ENABLED: "true"
+
+  # One-shot job: creates the business topics once Kafka is healthy, then exits.
+  kafka-init:
+    image: apache/kafka:3.8.0
+    container_name: sf-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP: kafka:29092
+    volumes:
+      - ./infra:/init:ro
+    entrypoint: ["/bin/bash", "/init/create-topics.sh"]
+    restart: "no"
+
+
+  # --- Application services (build once each team has scaffolded its service) ---
+
+  order-service:
+    build:
+      context: .
+      dockerfile: services/order-service/Dockerfile
+    container_name: sf-order
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    environment:
+      QUARKUS_PROFILE: prod
+    ports:
+      - "8081:8080"
+
+  planning-service:
+    build:
+      context: .
+      dockerfile: services/planning-service/Dockerfile
+    container_name: sf-planning
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    environment:
+      QUARKUS_PROFILE: prod
+    ports:
+      - "8082:8080"
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: services/inventory-service/Dockerfile
+    container_name: sf-inventory
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    environment:
+      QUARKUS_PROFILE: prod
+    ports:
+      - "8083:8080"
+
+  procurement-service:
+    build:
+      context: .
+      dockerfile: services/procurement-service/Dockerfile
+    container_name: sf-procurement
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    environment:
+      QUARKUS_PROFILE: prod
+    ports:
+      - "8084:8080"
+
+  assembly-service:
+    build:
+      context: .
+      dockerfile: services/assembly-service/Dockerfile
+    container_name: sf-assembly
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    environment:
+      QUARKUS_PROFILE: prod
+    ports:
+      - "8085:8080"
+
+  agv-service:
+    build:
+      context: .
+      dockerfile: services/agv-service/Dockerfile
+    container_name: sf-agv
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    environment:
+      QUARKUS_PROFILE: prod
+    ports:
+      - "8086:8080"
+
+  quality-service:
+    build:
+      context: .
+      dockerfile: services/quality-service/Dockerfile
+    container_name: sf-quality
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    environment:
+      QUARKUS_PROFILE: prod
+    ports:
+      - "8087:8080"
+
+  dwh-service:
+    build:
+      context: .
+      dockerfile: services/dwh-service/Dockerfile
+    container_name: sf-dwh
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    environment:
+      QUARKUS_PROFILE: prod
+    ports:
+      - "8088:8080"
+
+volumes:
+  sf-pgdata:
+

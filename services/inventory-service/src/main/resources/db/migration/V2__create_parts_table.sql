@@ -1,0 +1,5 @@
+CREATE TABLE parts (
+    id BIGSERIAL PRIMARY KEY,
+    part_code VARCHAR(255) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL
+);
